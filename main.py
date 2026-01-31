@@ -1,5 +1,6 @@
 import os
 import threading
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -77,6 +78,7 @@ def build_keyboard():
         ],
         [
             InlineKeyboardButton("⛔️ İlanı Durdur", callback_data="stop"),
+            InlineKeyboardButton("🔔 Ders Başladı", callback_data="alert"),
         ]
     ])
 
@@ -152,6 +154,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group["participants"].remove(user)
         if user in group["listeners"]:
             group["listeners"].remove(user)
+    elif query.data == "alert":
+        if not await is_admin(update, context):
+            await query.answer("❌ Sadece yöneticiler", show_alert=True)
+            return
+        if group["participants"]:
+            mentions = ", ".join(f"[{name}](tg://user?id={query.from_user.id})" for name in group["participants"])
+            alert_msg = f"🔔 Ders Başladı! {mentions}"
+            sent = await context.bot.send_message(chat_id=chat_id, text=alert_msg, parse_mode="Markdown")
+            # حذف التاغ بعد 5 دقائق
+            async def remove_alert():
+                await asyncio.sleep(300)  # 5 دقائق
+                try:
+                    await sent.delete()
+                except:
+                    pass
+            asyncio.create_task(remove_alert())
+        await query.answer("🔔 الدرس بدأ وتم إرسال التنبيه", show_alert=True)
 
     await query.edit_message_text(
         build_text(group),
@@ -163,10 +182,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Main Function
 # --------------------------
 def main():
-    # Start dummy HTTP server in a separate thread
     threading.Thread(target=run_server, daemon=True).start()
-
-    # Start Telegram bot
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
