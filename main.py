@@ -4,7 +4,6 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# تخزين البيانات لكل مجموعة
 groups = {}
 
 
@@ -37,7 +36,8 @@ def get_group(chat_id):
         groups[chat_id] = {
             "participants": [],
             "listeners": [],
-            "active": False
+            "active": False,
+            "message_id": None
         }
     return groups[chat_id]
 
@@ -75,25 +75,44 @@ def build_keyboard():
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 🗑️ حذف أمر /start لتنظيف الشات
+    try:
+        await update.message.delete()
+    except:
+        pass
+
     if not await is_admin(update, context):
-        await update.message.reply_text(
-            "❌ Bu komutu sadece yöneticiler kullanabilir."
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="❌ Bu komutu sadece yöneticiler kullanabilir."
         )
         return
 
     chat_id = update.effective_chat.id
     group = get_group(chat_id)
 
-    group["participants"].clear()
-    group["listeners"].clear()
-    group["active"] = True
+    # إذا الإعلان غير نشط → إعلان جديد فاضي
+    if not group["active"]:
+        group["participants"].clear()
+        group["listeners"].clear()
+        group["active"] = True
 
-    await context.bot.send_message(
+    # 🗑️ حذف القالب السابق إن وجد
+    if group["message_id"]:
+        try:
+            await context.bot.delete_message(chat_id, group["message_id"])
+        except:
+            pass
+
+    # ⬇️ إرسال القالب الجديد
+    msg = await context.bot.send_message(
         chat_id=chat_id,
         text=build_text(group),
         reply_markup=build_keyboard(),
         parse_mode="Markdown"
     )
+
+    group["message_id"] = msg.message_id
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -109,6 +128,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         group["active"] = False
+        group["message_id"] = None
         await query.edit_message_reply_markup(None)
         await query.answer("✅ İlan durduruldu", show_alert=True)
         return
