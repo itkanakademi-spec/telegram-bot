@@ -14,8 +14,7 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return any(admin.user and admin.user.id == user_id for admin in admins)
 
     if update.message and update.message.sender_chat:
-        if update.message.sender_chat.id == update.effective_chat.id:
-            return True
+        return update.message.sender_chat.id == update.effective_chat.id
 
     return False
 
@@ -26,7 +25,7 @@ def ltr(text: str) -> str:
 
 def format_list(items):
     return "\n".join(
-        f"**{i}.** {ltr(name)}"
+        f"<b>{i}.</b> {ltr(name)}"
         for i, name in enumerate(items, start=1)
     )
 
@@ -43,16 +42,16 @@ def get_group(chat_id):
 
 
 def build_text(group):
-    text = "*🔸🔶🔸 İTKAN | Kur’an Akademisi 🔸🔶🔸*\n\n"
+    text = "🔸🔶🔸 <b>İTKAN | Kur’an Akademisi</b> 🔸🔶🔸\n\n"
 
-    text += "*🔸 Katılımcılar:*\n"
+    text += "🔸 <b>Katılımcılar:</b>\n"
     text += format_list(group["participants"]) if group["participants"] else "Henüz kimse yok"
 
-    text += "\n\n*🔸 Dinleyiciler:*\n"
+    text += "\n\n🔸 <b>Dinleyiciler:</b>\n"
     text += format_list(group["listeners"]) if group["listeners"] else "Henüz kimse yok"
 
     text += (
-        "\n\n*📖 Kur’an kalplere şifa, hayata nurdur.*\n"
+        "\n\n📖 <i>Kur’an kalplere şifa, hayata nurdur.</i>\n"
         "Niyet et, adım at, Allah kolaylaştırsın 🤲🏻🧡\n\n"
         "👇 Lütfen aşağıdan durumunu seç"
     )
@@ -75,7 +74,6 @@ def build_keyboard():
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 🗑️ حذف أمر /start لتنظيف الشات
     try:
         await update.message.delete()
     except:
@@ -91,25 +89,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     group = get_group(chat_id)
 
-    # إذا الإعلان غير نشط → إعلان جديد فاضي
     if not group["active"]:
         group["participants"].clear()
         group["listeners"].clear()
         group["active"] = True
 
-    # 🗑️ حذف القالب السابق إن وجد
     if group["message_id"]:
         try:
             await context.bot.delete_message(chat_id, group["message_id"])
         except:
             pass
 
-    # ⬇️ إرسال القالب الجديد
     msg = await context.bot.send_message(
         chat_id=chat_id,
         text=build_text(group),
         reply_markup=build_keyboard(),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
     group["message_id"] = msg.message_id
@@ -120,7 +115,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = query.message.chat.id
     group = get_group(chat_id)
 
-    user = query.from_user.full_name if query.from_user else "Unknown"
+    user = query.from_user.full_name
 
     if query.data == "stop":
         if not await is_admin(update, context):
@@ -158,7 +153,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         build_text(group),
         reply_markup=build_keyboard(),
-        parse_mode="Markdown"
+        parse_mode="HTML"
     )
 
 
