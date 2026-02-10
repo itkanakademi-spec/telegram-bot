@@ -117,7 +117,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat_id = query.message.chat.id
     group = get_group(chat_id)
-    user = query.from_user.full_name
+    user = query.from_user
+
+    name = user.full_name
+    user_id = user.id
 
     if query.data == "stop":
         if not await is_admin(update, context):
@@ -132,42 +135,67 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("Kayıt kapalı", show_alert=True)
         return
 
+    participant = next((u for u in group["participants"] if u["name"] == name), None)
+
     if query.data == "join":
-        if not any(u["name"] == user for u in group["participants"]):
-            group["participants"].append({"name": user, "done": False})
-        group["listeners"] = [l for l in group["listeners"] if l != user]
-
-    elif query.data == "listen":
-        if user not in group["listeners"]:
-            group["listeners"].append(user)
-        group["participants"] = [u for u in group["participants"] if u["name"] != user]
-
-    elif query.data == "done":
-        participant = next(
-            (u for u in group["participants"] if u["name"] == user),
-            None
-        )
-
         if participant:
             if participant["done"]:
-                await query.answer("Zaten işaretlendi", show_alert=False)
+                await query.answer("Okuduktan sonra değiştirilemez", show_alert=True)
                 return
-            participant["done"] = True
-            await query.answer("Allah kabul etsin 🌸", show_alert=False)
-
-        elif user in group["listeners"]:
-            await query.answer("Dinleyicisiniz", show_alert=True)
-            return
-
         else:
-            await query.answer("Henüz sıra almadınız", show_alert=True)
+            group["participants"].append({"name": name, "id": user_id, "done": False})
+            group["listeners"] = [l for l in group["listeners"] if l != name]
+
+    elif query.data == "listen":
+        if participant:
+            if participant["done"]:
+                await query.answer("Okuduktan sonra dinleyici olamazsınız", show_alert=True)
+                return
+            group["participants"] = [u for u in group["participants"] if u["name"] != name]
+        if name not in group["listeners"]:
+            group["listeners"].append(name)
+
+    elif query.data == "done":
+        if not participant:
+            if name in group["listeners"]:
+                await query.answer("Dinleyicisiniz", show_alert=True)
+            else:
+                await query.answer("Henüz sıra almadınız", show_alert=True)
             return
+
+        if participant["done"]:
+            await query.answer("Zaten işaretlendi", show_alert=False)
+            return
+
+        participant["done"] = True
+        await query.answer("Allah kabul etsin 🌸", show_alert=False)
 
     elif query.data == "alert":
         if not await is_admin(update, context):
             await query.answer("Sadece yöneticiler", show_alert=True)
             return
-        await query.answer("Ders başladı bildirimi gönderildi", show_alert=False)
+
+        if group["participants"]:
+            mentions = " ".join(
+                f"[{u['name']}](tg://user?id={u['id']})"
+                for u in group["participants"]
+            )
+            sent = await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"🔔 Ders başladı!\n{mentions}",
+                parse_mode="Markdown"
+            )
+
+            async def delete_alert():
+                await asyncio.sleep(300)
+                try:
+                    await sent.delete()
+                except:
+                    pass
+
+            asyncio.create_task(delete_alert())
+
+        await query.answer("Bildirim gönderildi", show_alert=False)
 
     await query.edit_message_text(
         build_text(group),
