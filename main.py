@@ -1,5 +1,6 @@
 import os
 import threading
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -28,35 +29,54 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admins = await context.bot.get_chat_administrators(update.effective_chat.id)
     return any(a.user.id == user_id for a in admins)
 
+def ltr(text: str) -> str:
+    return "\u200e" + text
+
+def format_list(items):
+    return "\n".join(
+        f"{i}. {ltr(u['name'])}{' ✅' if u.get('done') else ''}"
+        for i, u in enumerate(items, start=1)
+    )
+
 def get_group(chat_id):
     if chat_id not in groups:
         groups[chat_id] = {
             "participants": [],
+            "listeners": [],
             "active": False,
             "message_id": None
         }
     return groups[chat_id]
 
 def build_text(group):
-    lines = []
-    for i, u in enumerate(group["participants"], start=1):
-        mark = " ✅" if u["done"] else ""
-        lines.append(f"{i}. {u['name']}{mark}")
-
-    text = "*🔸🔶🔸 İTKAN KURAN AKADEMİSİ 🔸🔶🔸*\n\n"
-    text += "*✋🏻 Katılımcılar:*\n"
-    text += "\n".join(lines) if lines else "Henüz kimse yok"
-    text += "\n\n👇 Okuduysan aşağıdan işaretle"
+    text = "*🔸🔶🔸 İTKAN | Kur’an Akademisi 🔸🔶🔸*\n\n"
+    text += "*✋ Katılımcılar:*\n"
+    text += format_list(group["participants"]) if group["participants"] else "Henüz kimse yok"
+    text += "\n\n*🎧 Dinleyiciler:*\n"
+    text += "\n".join(ltr(name) for name in group["listeners"]) if group["listeners"] else "Yok"
+    text += (
+        "\n\n*📖 Kur’an kalplere şifa, hayata nurdur.*\n"
+        "👇 Durumunu aşağıdan seç"
+    )
     return text
 
 def build_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ Okudum", callback_data="done")],
-        [InlineKeyboardButton("⛔️ İlanı Durdur", callback_data="stop")]
+        [
+            InlineKeyboardButton("✋ Katılıyorum", callback_data="join"),
+            InlineKeyboardButton("🎧 Dinleyici", callback_data="listen"),
+        ],
+        [
+            InlineKeyboardButton("✅ Okudum", callback_data="done"),
+        ],
+        [
+            InlineKeyboardButton("⛔️ İlanı Durdur", callback_data="stop"),
+            InlineKeyboardButton("🔔 Ders Başladı", callback_data="alert"),
+        ]
     ])
 
 # --------------------------
-# /start
+# Start
 # --------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -70,8 +90,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     group = get_group(chat_id)
 
-    group["participants"].clear()
-    group["active"] = True
+    if not group["active"]:
+        group["participants"].clear()
+        group["listeners"].clear()
+        group["active"] = True
 
     if group["message_id"]:
         try:
@@ -95,29 +117,57 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat_id = query.message.chat.id
     group = get_group(chat_id)
-    name = query.from_user.full_name
+    user = query.from_user.full_name
 
     if query.data == "stop":
         if not await is_admin(update, context):
+            await query.answer("Sadece yöneticiler", show_alert=True)
             return
         group["active"] = False
         await query.edit_message_reply_markup(None)
+        await query.answer("İlan durduruldu", show_alert=True)
         return
 
     if not group["active"]:
         await query.answer("Kayıt kapalı", show_alert=True)
         return
 
-    if query.data == "done":
-        user = next((u for u in group["participants"] if u["name"] == name), None)
+    if query.data == "join":
+        if not any(u["name"] == user for u in group["participants"]):
+            group["participants"].append({"name": user, "done": False})
+        group["listeners"] = [l for l in group["listeners"] if l != user]
 
-        if not user:
-            group["participants"].append({"name": name, "done": True})
-        elif user["done"]:
-            await query.answer("Zaten işaretlendi", show_alert=False)
+    elif query.data == "listen":
+        if user not in group["listeners"]:
+            group["listeners"].append(user)
+        group["participants"] = [u for u in group["participants"] if u["name"] != user]
+
+    elif query.data == "done":
+        participant = next(
+            (u for u in group["participants"] if u["name"] == user),
+            None
+        )
+
+        if participant:
+            if participant["done"]:
+                await query.answer("Zaten işaretlendi", show_alert=False)
+                return
+            participant["done"] = True
+            await query.answer("Allah kabul etsin 🌸", show_alert=False)
+
+        elif user in group["listeners"]:
+            await query.answer("Dinleyicisiniz", show_alert=True)
             return
+
         else:
-            user["done"] = True
+            await query.answer("Henüz sıra almadınız", show_alert=True)
+            return
+
+    elif query.data == "alert":
+        if not await is_admin(update, context):
+            await query.answer("Sadece yöneticiler", show_alert=True)
+            return
+        await query.answer("Ders başladı bildirimi gönderildi", show_alert=False)
 
     await query.edit_message_text(
         build_text(group),
