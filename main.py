@@ -1,7 +1,6 @@
 import os
 import json
 import threading
-import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -98,7 +97,6 @@ def build_keyboard():
         ],
         [
             InlineKeyboardButton("⛔️ İlanı Durdur", callback_data="stop"),
-            InlineKeyboardButton("🔔 Ders Başladı", callback_data="alert"),
         ]
     ])
 
@@ -195,26 +193,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         group["participants"][name] = True
         await query.answer("✅ MaşaAllah, Allah muvaffak eylesin 🤲🏻")
-
-    # ALERT
-    elif query.data == "alert":
-        if not await is_admin(update, context):
-            return
-        if group["participants"]:
-            mentions = ", ".join(group["participants"].keys())
-            msg = await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"🔔 Ders Başladı!\n{mentions}"
-            )
-
-            async def delete_later():
-                await asyncio.sleep(300)
-                try:
-                    await msg.delete()
-                except:
-                    pass
-
-            asyncio.create_task(delete_later())
 
     save_state()
     await query.edit_message_text(
