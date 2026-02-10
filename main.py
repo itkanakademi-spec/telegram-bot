@@ -1,4 +1,5 @@
 import os
+import json
 import threading
 import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -6,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+STATE_FILE = "state.json"
 
 groups = {}
 
@@ -22,6 +24,21 @@ def run_server():
     HTTPServer(("0.0.0.0", 1551), DummyHandler).serve_forever()
 
 # --------------------------
+# State Persistence
+# --------------------------
+def save_state():
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(groups, f, ensure_ascii=False)
+
+def load_state():
+    global groups
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            groups = json.load(f)
+    except:
+        groups = {}
+
+# --------------------------
 # Helpers
 # --------------------------
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,16 +46,22 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admins = await context.bot.get_chat_administrators(update.effective_chat.id)
     return any(a.user.id == user_id for a in admins)
 
+def ltr(text: str) -> str:
+    return "\u200e" + text
+
 def get_group(chat_id):
     if chat_id not in groups:
         groups[chat_id] = {
             "participants": {},  # name: done(bool)
-            "listeners": set(),
+            "listeners": [],
             "active": False,
             "message_id": None
         }
     return groups[chat_id]
 
+# --------------------------
+# UI Builders
+# --------------------------
 def build_text(group):
     text = "*🔸🔶🔸 İTKAN | Kur’an Akademisi 🔸🔶🔸*\n\n"
 
@@ -46,14 +69,14 @@ def build_text(group):
     if group["participants"]:
         for i, (name, done) in enumerate(group["participants"].items(), start=1):
             mark = " ✅" if done else ""
-            text += f"{i}. {name}{mark}\n"
+            text += f"{i}. {ltr(name)}{mark}\n"
     else:
         text += "Henüz kimse yok\n"
 
     text += "\n*🔸 Dinleyiciler:*\n"
     if group["listeners"]:
         for i, name in enumerate(group["listeners"], start=1):
-            text += f"{i}. {name}\n"
+            text += f"{i}. {ltr(name)}\n"
     else:
         text += "Henüz kimse yok\n"
 
@@ -80,7 +103,7 @@ def build_keyboard():
     ])
 
 # --------------------------
-# Start
+# /start
 # --------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -94,9 +117,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     group = get_group(chat_id)
 
-    group["participants"].clear()
-    group["listeners"].clear()
-    group["active"] = True
+    if not group["active"]:
+        group["participants"].clear()
+        group["listeners"].clear()
+        group["active"] = True
+        save_state()
 
     if group["message_id"]:
         try:
@@ -105,13 +130,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
     msg = await context.bot.send_message(
-        chat_id,
-        build_text(group),
+        chat_id=chat_id,
+        text=build_text(group),
         reply_markup=build_keyboard(),
         parse_mode="Markdown"
     )
-
     group["message_id"] = msg.message_id
+    save_state()
 
 # --------------------------
 # Buttons
@@ -124,9 +149,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "stop":
         if not await is_admin(update, context):
-            await query.answer("❌ Sadece yöneticiler")
             return
         group["active"] = False
+        group["participants"].clear()
+        group["listeners"].clear()
+        save_state()
         await query.edit_message_reply_markup(None)
         return
 
@@ -134,65 +161,73 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⛔️ Kayıt kapalı")
         return
 
-    # Katılıyorum
+    # JOIN
     if query.data == "join":
         if name in group["participants"]:
-            await query.answer("Zaten katılımcısın")
+            await query.answer("Zaten katılımcısın 🌸")
             return
-        group["listeners"].discard(name)
+        if name in group["listeners"]:
+            group["listeners"].remove(name)
+
         group["participants"][name] = False
         await query.answer("🌸 Niyetin çok güzel !!")
 
-    # Dinleyici
+    # LISTEN
     elif query.data == "listen":
-        if name in group["participants"] and group["participants"][name]:
-            await query.answer("Okuduktan sonra değiştirilemez")
+        if name in group["participants"]:
+            if group["participants"][name]:
+                await query.answer("Okuduktan sonra durum değiştirilemez")
+            else:
+                await query.answer("Katılımcı olarak eklisin")
             return
-        group["participants"].pop(name, None)
-        group["listeners"].add(name)
-        await query.answer("🌷 İnşaAllah istifade edersin")
+        if name not in group["listeners"]:
+            group["listeners"].append(name)
+            await query.answer("İnşaAllah istifade edersin 🌷")
 
-    # Okudum
+    # DONE
     elif query.data == "done":
         if name not in group["participants"]:
-            await query.answer("Önce katılmalısın")
+            await query.answer("Henüz sıraya girmedin")
             return
         if group["participants"][name]:
             await query.answer("Zaten işaretlendi")
             return
-        group["participants"][name] = True
-        await query.answer("✅ MaşaAllah , Allah muvaffak eylesin 🤲🏻")
 
-    # Ders başladı
+        group["participants"][name] = True
+        await query.answer("✅ MaşaAllah, Allah muvaffak eylesin 🤲🏻")
+
+    # ALERT
     elif query.data == "alert":
         if not await is_admin(update, context):
-            await query.answer("❌ Sadece yöneticiler")
             return
         if group["participants"]:
-            mentions = " ".join(group["participants"].keys())
+            mentions = ", ".join(group["participants"].keys())
             msg = await context.bot.send_message(
-                chat_id,
-                f"🔔 Ders Başladı!\n{mentions}"
+                chat_id=chat_id,
+                text=f"🔔 Ders Başladı!\n{mentions}"
             )
-            asyncio.create_task(auto_delete(msg))
 
+            async def delete_later():
+                await asyncio.sleep(300)
+                try:
+                    await msg.delete()
+                except:
+                    pass
+
+            asyncio.create_task(delete_later())
+
+    save_state()
     await query.edit_message_text(
         build_text(group),
         reply_markup=build_keyboard(),
         parse_mode="Markdown"
     )
 
-async def auto_delete(msg):
-    await asyncio.sleep(300)
-    try:
-        await msg.delete()
-    except:
-        pass
-
 # --------------------------
 # Main
 # --------------------------
 def main():
+    load_state()
     threading.Thread(target=run_server, daemon=True).start()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
