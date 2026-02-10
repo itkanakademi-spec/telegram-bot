@@ -56,7 +56,7 @@ def build_keyboard():
     ])
 
 # --------------------------
-# Start Command
+# /start
 # --------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -70,7 +70,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     group = get_group(chat_id)
 
-    # Yeni ilan → tamamen sıfır
     group["participants"].clear()
     group["active"] = True
 
