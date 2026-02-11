@@ -1,5 +1,5 @@
 def build_text(group):
-    text = "*🔸🔶🔸🌙⭐️ İTKAN | Kur’an Akademisi 🌙⭐️🔸🔶🔸*\n\n"
+    text = "*🔸🔶🌙⭐️ İTKAN | Kur’an Akademisi 🌙⭐️🔶🔸*\n\n"
 
     text += "*🔸 Katılımcılar:*\n"
     if group["participants"]:
