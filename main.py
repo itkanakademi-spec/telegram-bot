@@ -122,7 +122,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     group = get_group(chat_id)
 
-    # 🔵 Eğer oturum aktifse
+    # 🔵 Oturum aktifse → eski mesaj silinir, aynı liste tekrar gönderilir
     if group["active"]:
 
         if group["message_id"]:
@@ -145,7 +145,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_state()
         return
 
-    # 🔴 Eğer oturum kapalıysa → yeni temiz oturum başlat
+    # 🔴 Oturum kapalıysa → yeni temiz oturum başlatılır (eski mesaj silinmez)
 
     group["participants"] = {}
     group["listeners"] = []
@@ -172,7 +172,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group = get_group(chat_id)
     name = query.from_user.full_name
 
-    # İlanı Durdur
     if query.data == "stop":
         if not await is_admin(update, context):
             return
@@ -191,7 +190,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⛔️ Kayıt kapalı")
         return
 
-    # Katılım
     if query.data == "join":
         if name in group["participants"]:
             await query.answer("Zaten katılımcısın 🌸")
@@ -203,7 +201,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group["participants"][name] = False
         await query.answer("🌸 Katılımın kaydedildi")
 
-    # Dinleyici
     elif query.data == "listen":
         if name in group["participants"]:
             await query.answer("Zaten katılımcısın")
@@ -213,7 +210,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group["listeners"].append(name)
             await query.answer("🌷 Dinleyici olarak kaydedildin")
 
-    # Okudum
     elif query.data == "done":
         if name not in group["participants"]:
             await query.answer("Henüz katılmadın")
