@@ -49,7 +49,7 @@ def ltr(text: str) -> str:
     return "\u200e" + text
 
 def get_group(chat_id):
-    chat_id = str(chat_id)  # مهم حتى لا تضيع البيانات بعد إعادة التشغيل
+    chat_id = str(chat_id)
     if chat_id not in groups:
         groups[chat_id] = {
             "participants": {},
@@ -80,11 +80,10 @@ def build_text(group):
     else:
         text += "Henüz kimse yok\n"
 
-    text += (
-        "\n*📖 Kur’an kalplere şifa, hayata nurdur.*\n"
-        "*Niyet et, adım at, Allah muvaffak eylesin 🤲🏻*\n"
-        "*🌙⭐️ Ramazan berekettir, rahmettir, mağfirettir. Bu ayı en güzel şekilde değerlendirelim! ⭐️🌙*\n\n"
-    )
+    text += "\n*📖 Kur’an kalplere şifa, hayata nurdur.*\n\n"
+    "*Niyet et, adım at, Allah muvaffak eylesin 🤲🏻*\n"
+    
+    "*🌙⭐️ Ramazan berekettir, rahmettir, mağfirettir. Bu ayı en güzel şekilde değerlendirelim! ⭐️🌙*\n\n" )
 
     if group["active"]:
         text += "👇 Lütfen aşağıdan durumunu seç"
@@ -122,17 +121,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     group = get_group(chat_id)
 
-    # لا نحذف الأسماء — فقط نفعّل الجلسة
-    if not group["active"]:
-        group["active"] = True
-        save_state()
+    # ==========================
+    # الحالة A: الجلسة نشطة
+    # ==========================
+    if group["active"]:
 
-    # حذف الرسالة القديمة إن وجدت
-    if group["message_id"]:
-        try:
-            await context.bot.delete_message(chat_id, group["message_id"])
-        except:
-            pass
+        if group["message_id"]:
+            try:
+                await context.bot.delete_message(
+                    chat_id=chat_id,
+                    message_id=group["message_id"]
+                )
+            except:
+                pass
+
+        msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=build_text(group),
+            reply_markup=build_keyboard(),
+            parse_mode="Markdown"
+        )
+
+        group["message_id"] = msg.message_id
+        save_state()
+        return
+
+    # ==========================
+    # الحالة B: كانت متوقفة
+    # ==========================
+
+    group["participants"] = {}
+    group["listeners"] = []
+    group["active"] = True
 
     msg = await context.bot.send_message(
         chat_id=chat_id,
@@ -174,7 +194,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⛔️ Kayıt kapalı")
         return
 
-    # JOIN
     if query.data == "join":
         if name in group["participants"]:
             await query.answer("Zaten katılımcısın 🌸")
@@ -186,7 +205,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         group["participants"][name] = False
         await query.answer("🌸 Niyetin çok güzel !!")
 
-    # LISTEN
     elif query.data == "listen":
         if name in group["participants"]:
             await query.answer("Zaten katılımcısın")
@@ -196,7 +214,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group["listeners"].append(name)
             await query.answer("İnşaAllah istifade edersin 🌷")
 
-    # DONE
     elif query.data == "done":
         if name not in group["participants"]:
             await query.answer("Henüz sıraya girmedin")
