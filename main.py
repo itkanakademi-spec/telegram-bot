@@ -122,10 +122,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group = get_group(chat_id)
 
     if not group["active"]:
-        group["participants"].clear()
-        group["listeners"].clear()
-        group["active"] = True
-        save_state()
+    group["active"] = True
+    save_state()
+
 
     if group["message_id"]:
         try:
