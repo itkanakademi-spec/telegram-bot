@@ -11,7 +11,7 @@ STATE_FILE = "state.json"
 groups = {}
 
 # --------------------------
-# Dummy HTTP Server (Railway)
+# Dummy HTTP Server (Railway için)
 # --------------------------
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -23,7 +23,7 @@ def run_server():
     HTTPServer(("0.0.0.0", 1551), DummyHandler).serve_forever()
 
 # --------------------------
-# State Persistence
+# Veri Kaydetme
 # --------------------------
 def save_state():
     with open(STATE_FILE, "w", encoding="utf-8") as f:
@@ -38,7 +38,7 @@ def load_state():
         groups = {}
 
 # --------------------------
-# Helpers
+# Yardımcı Fonksiyonlar
 # --------------------------
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -60,7 +60,7 @@ def get_group(chat_id):
     return groups[chat_id]
 
 # --------------------------
-# UI Builders
+# Mesaj Oluşturma
 # --------------------------
 def build_text(group):
     text = "*🔸🔶🌙⭐️ İTKAN | Kur’an Akademisi 🌙⭐️🔶🔸*\n\n"
@@ -80,15 +80,16 @@ def build_text(group):
     else:
         text += "Henüz kimse yok\n"
 
-    text += "\n*📖 Kur’an kalplere şifa, hayata nurdur.*\n\n"
-    "*Niyet et, adım at, Allah muvaffak eylesin 🤲🏻*\n"
-    
-    "*🌙⭐️ Ramazan berekettir, rahmettir, mağfirettir. Bu ayı en güzel şekilde değerlendirelim! ⭐️🌙*\n\n" )
+    text += (
+        "\n*📖 Kur’an kalplere şifa, hayata nurdur.*\n"
+        "*Niyet et, adım at, Allah muvaffak eylesin 🤲🏻*\n"
+        "*🌙⭐️ Ramazan berekettir, rahmettir, mağfirettir.*\n\n"
+    )
 
     if group["active"]:
         text += "👇 Lütfen aşağıdan durumunu seç"
     else:
-        text += "📕 *Ders bitti*"
+        text += "📕 *Ders sona erdi*"
 
     return text
 
@@ -107,7 +108,7 @@ def build_keyboard():
     ])
 
 # --------------------------
-# /start
+# /start Komutu
 # --------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -121,9 +122,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     group = get_group(chat_id)
 
-    # ==========================
-    # الحالة A: الجلسة نشطة
-    # ==========================
+    # 🔵 Eğer oturum aktifse
     if group["active"]:
 
         if group["message_id"]:
@@ -146,9 +145,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_state()
         return
 
-    # ==========================
-    # الحالة B: كانت متوقفة
-    # ==========================
+    # 🔴 Eğer oturum kapalıysa → yeni temiz oturum başlat
 
     group["participants"] = {}
     group["listeners"] = []
@@ -165,7 +162,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_state()
 
 # --------------------------
-# Buttons
+# Buton İşlemleri
 # --------------------------
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -175,7 +172,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group = get_group(chat_id)
     name = query.from_user.full_name
 
-    # STOP
+    # İlanı Durdur
     if query.data == "stop":
         if not await is_admin(update, context):
             return
@@ -194,6 +191,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⛔️ Kayıt kapalı")
         return
 
+    # Katılım
     if query.data == "join":
         if name in group["participants"]:
             await query.answer("Zaten katılımcısın 🌸")
@@ -203,8 +201,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group["listeners"].remove(name)
 
         group["participants"][name] = False
-        await query.answer("🌸 Niyetin çok güzel !!")
+        await query.answer("🌸 Katılımın kaydedildi")
 
+    # Dinleyici
     elif query.data == "listen":
         if name in group["participants"]:
             await query.answer("Zaten katılımcısın")
@@ -212,11 +211,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if name not in group["listeners"]:
             group["listeners"].append(name)
-            await query.answer("İnşaAllah istifade edersin 🌷")
+            await query.answer("🌷 Dinleyici olarak kaydedildin")
 
+    # Okudum
     elif query.data == "done":
         if name not in group["participants"]:
-            await query.answer("Henüz sıraya girmedin")
+            await query.answer("Henüz katılmadın")
             return
 
         if group["participants"][name]:
@@ -224,7 +224,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         group["participants"][name] = True
-        await query.answer("✅ MaşaAllah, Allah muvaffak eylesin 🤲🏻")
+        await query.answer("✅ Tebrikler, işaretlendi")
 
     save_state()
 
