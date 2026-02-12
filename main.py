@@ -151,19 +151,20 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group = get_group(chat_id)
     name = query.from_user.full_name
 
-    if query.data == "stop":
-        if not await is_admin(update, context):
-            return
-        group["active"] = False
-        group["participants"].clear()
-        group["listeners"].clear()
-        save_state()
-        await query.edit_message_text(
-            build_text(group),
-            reply_markup=None,
-            parse_mode="Markdown"
-        )
+   if query.data == "stop":
+    if not await is_admin(update, context):
         return
+
+    group["active"] = False
+    save_state()
+
+    await query.edit_message_text(
+        build_text(group),
+        reply_markup=None,
+        parse_mode="Markdown"
+    )
+    return
+
 
     if not group["active"]:
         await query.answer("⛔️ Kayıt kapalı")
